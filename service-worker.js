@@ -1,25 +1,30 @@
 // service-worker.js
-// =====================
-// Progressive Web App service worker for offline support
-// Caches static assets and the GeoJSON file
-// =====================
+// ======================================================
+// Progressive Web App (PWA) Service Worker
+// for the Ireland Interactive County Map
+// ======================================================
 
-// Change this version when updating files to force cache refresh
-const CACHE = "ireland-map-v1";
+// 🔄 Bump this version any time you change a file
+const CACHE = "ireland-map-v4";
 
-// Files and URLs to cache
+// List of core assets to cache (update if files change)
 const ASSETS = [
-  "./",                       // root
-  "./index.html",              // main page
-  "./manifest.json",           // PWA manifest
-  "./irish_counties.geojson",  // map data
-  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", // Leaflet CSS
-  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"   // Leaflet JS
+  "./",
+  "./index.html",
+  "./manifest.json",
+  "./irish_counties.geojson",
+  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
+  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
 ];
 
-// Install event — pre-cache all required assets
+// ======================================================
+// INSTALL EVENT
+// Pre-caches app shell and data
+// ======================================================
 self.addEventListener("install", (event) => {
-  console.log("[Service Worker] Installing and caching app shell...");
+  console.log("[Service Worker] Installing and caching core assets…");
+  self.skipWaiting(); // take control immediately
+
   event.waitUntil(
     caches.open(CACHE).then((cache) => {
       return cache.addAll(ASSETS);
@@ -27,40 +32,82 @@ self.addEventListener("install", (event) => {
   );
 });
 
-// Activate event — clean up old caches
+// ======================================================
+// ACTIVATE EVENT
+// Cleans old caches and claims new clients
+// ======================================================
 self.addEventListener("activate", (event) => {
-  console.log("[Service Worker] Activating new version and cleaning old caches...");
+  console.log("[Service Worker] Activating new version:", CACHE);
+
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys
           .filter((key) => key !== CACHE)
-          .map((key) => caches.delete(key))
+          .map((key) => {
+            console.log("[Service Worker] Removing old cache:", key);
+            return caches.delete(key);
+          })
       );
+    })
+  );
+
+  // Take control of open pages immediately
+  self.clients.claim();
+});
+
+// ======================================================
+// FETCH EVENT
+// Serves cached assets first, then falls back to network
+// ======================================================
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+
+  // Ignore non-GET requests and external analytics requests
+  if (req.method !== "GET" || req.url.includes("google-analytics")) {
+    return;
+  }
+
+  event.respondWith(
+    caches.match(req).then((cachedResponse) => {
+      // Serve cached version if found
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      // Otherwise fetch from network and cache dynamically
+      return fetch(req)
+        .then((networkResponse) => {
+          // Only cache valid responses
+          if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== "basic") {
+            return networkResponse;
+          }
+
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE).then((cache) => cache.put(req, responseClone));
+          return networkResponse;
+        })
+        .catch(() => {
+          // Optional fallback: serve offline content if network fails
+          if (req.destination === "document") {
+            return caches.match("./index.html");
+          }
+        });
     })
   );
 });
 
-// Fetch event — serve cached assets when offline
-self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      // Return cached file, or fetch from network if not available
-      return (
-        cachedResponse ||
-        fetch(event.request).then((networkResponse) => {
-          // Optionally cache new requests
-          return caches.open(CACHE).then((cache) => {
-            cache.put(event.request, networkResponse.clone());
-            return networkResponse;
-          });
-        })
-      );
-    }).catch(() => {
-      // Optional fallback: handle offline errors gracefully
-      if (event.request.destination === "document") {
-        return caches.match("./index.html");
-      }
-    })
-  );
+// ======================================================
+// MESSAGE EVENT (optional)
+// Allows manual cache clearing from the web app
+// ======================================================
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "CLEAR_CACHE") {
+    caches.keys().then((keys) => {
+      keys.forEach((key) => {
+        console.log("[Service Worker] Manually clearing cache:", key);
+        caches.delete(key);
+      });
+    });
+  }
 });
