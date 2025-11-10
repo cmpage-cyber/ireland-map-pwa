@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Ireland Interactive County Map</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <!-- Leaflet -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    .leaflet-tooltip {
+      background: white; border: 1px solid #bbb; border-radius: 6px; padding: 4px 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.15);
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin="">
+  </script>
+
+  <script>
+  // Register service worker for offline/PWA
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js');
+    });
+  }
+
+  // Irish meanings (keep it short for tooltips; you can expand)
+  const ETYM = {
+    "Antrim":["Aontroim","‘Lone ridge’ (aon + droim)"],
+    "Armagh":["Ard Mhacha","‘Height of Macha’"],
+    "Down":["An Dún","‘The fort’"],
+    "Fermanagh":["Fear Manach","‘Men/land of Manach’"],
+    "Tyrone":["Tír Eoghain","‘Land of Eoghan’"],
+    "Derry":["Doire","‘Oak grove’"],
+    "Donegal":["Dún na nGall","‘Fort of the foreigners’"],
+    "Monaghan":["Muineachán","‘Place of little thickets’"],
+    "Cavan":["An Cabhán","‘The hollow/little hill’"],
+    "Dublin":["Baile Átha Cliath","‘Town of the ford of hurdles’"],
+    "Kildare":["Cill Dara","‘Church of the oak’"],
+    "Kilkenny":["Cill Chainnigh","‘Church of Canice’"],
+    "Laois":["Laois","Uí Laoighis origin"],
+    "Longford":["An Longfort","‘The fortress/ship-fort’"],
+    "Louth":["Lú","Named after Lugh"],
+    "Meath":["An Mhí","From Mide ‘middle’"],
+    "Offaly":["Uíbh Fhailí","‘Descendants of Failge’"],
+    "Westmeath":["An Iarmhí","‘Western Meath’"],
+    "Wexford":["Loch Garman","‘Garman’s lake’"],
+    "Wicklow":["Cill Mhantáin","‘Church of Mantan’"],
+    "Carlow":["Ceatharlach","Poss. ‘cattle place’ / ‘four lakes’"],
+    "Clare":["An Clár","‘Board/plank’ or ‘plain’"],
+    "Cork":["Corcaigh","‘Marsh’"],
+    "Kerry":["Ciarraí","‘People of Ciar’"],
+    "Limerick":["Luimneach","Poss. ‘bare/floodplain’"],
+    "Tipperary":["Tiobraid Árann","‘Well of the Ara’"],
+    "Waterford":["Port Láirge","‘Harbour of Lairge’"],
+    "Galway":["Gaillimh","From the river; ‘stony/rocky’"],
+    "Leitrim":["Liatroim","‘Grey ridge’"],
+    "Mayo":["Maigh Eo","‘Plain of yews’"],
+    "Roscommon":["Ros Comáin","‘Comán’s wood’"],
+    "Sligo":["Sligeach","‘Shelly place’"]
+  };
+
+  // Base map (Light as default)
+  const map = L.map('map', { zoomControl: true }).setView([53.4, -7.9], 7);
+  const light = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap & CARTO'
+  }).addTo(map);
+  const dark  = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap & CARTO'
+  });
+
+  const baseLayers = { "Light": light, "Dark": dark };
+
+  // Style & highlight
+  const style = { color: "#555", weight: 1, fillColor: "#999", fillOpacity: 0.25 };
+  const highlight = { color: "#111", weight: 2, fillColor: "#ff0", fillOpacity: 0.7 };
+
+  // Load GeoJSON (same folder). You can also replace with a raw GitHub URL.
+  fetch('irish_counties.geojson')
+    .then(resp => resp.json())
+    .then(data => {
+      const layer = L.geoJSON(data, {
+        style: () => style,
+        onEachFeature: (feature, lyr) => {
+          const p = feature.properties || {};
+          const en = p.name_en || p.NAME_EN || p.CountyName || p.name || '';
+          const meta = ETYM[en] || ['', ''];
+          const ga = p.name_ga || meta[0] || '';
+          const meaning = p.meaning || meta[1] || '';
+
+          // Tooltip (appears on hover and long-press)
+          lyr.bindTooltip(
+            `<b>English</b> ${en}<br><b>Irish</b> ${ga}<br><b>Meaning</b> ${meaning}`,
+            { sticky: true }
+          );
+
+          // Popup on tap
+          lyr.bindPopup(
+            `<b>${en}</b><br><i>${ga}</i><p style="margin:6px 0 0;">${meaning}</p>`
+          );
+
+          // Highlight interactions (mouse + touch)
+          lyr.on({
+            mouseover: () => lyr.setStyle(highlight),
+            mouseout:  () => lyr.setStyle(style),
+            click:     () => lyr.openPopup()
+          });
+        }
+      }).addTo(map);
+
+      map.fitBounds(layer.getBounds(), { padding: [10, 10] });
+      L.control.layers(baseLayers, { "Counties": layer }, { collapsed: false }).addTo(map);
+    })
+    .catch(err => {
+      alert('Failed to load GeoJSON. Check the filename or URL in fetch().');
+      console.error(err);
+    });
+  </script>
+</body>
+</html>
