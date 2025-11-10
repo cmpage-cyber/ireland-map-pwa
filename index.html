@@ -19,7 +19,10 @@
   <style>
     html, body, #map { height: 100%; margin: 0; }
     .leaflet-tooltip {
-      background: white; border: 1px solid #bbb; border-radius: 6px; padding: 4px 6px;
+      background: white;
+      border: 1px solid #bbb;
+      border-radius: 6px;
+      padding: 4px 6px;
       box-shadow: 0 4px 12px rgba(0,0,0,.15);
     }
   </style>
@@ -42,7 +45,7 @@
     });
   }
 
-  // Irish meanings (keep it short for tooltips; you can expand)
+  // Irish meanings (short versions)
   const ETYM = {
     "Antrim":["Aontroim","‘Lone ridge’ (aon + droim)"],
     "Armagh":["Ard Mhacha","‘Height of Macha’"],
@@ -78,7 +81,7 @@
     "Sligo":["Sligeach","‘Shelly place’"]
   };
 
-  // Base map (Light as default)
+  // Base map (Light default)
   const map = L.map('map', { zoomControl: true }).setView([53.4, -7.9], 7);
   const light = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap & CARTO'
@@ -86,14 +89,16 @@
   const dark  = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap & CARTO'
   });
-
   const baseLayers = { "Light": light, "Dark": dark };
 
-  // Style & highlight
+  // Style
   const style = { color: "#555", weight: 1, fillColor: "#999", fillOpacity: 0.25 };
   const highlight = { color: "#111", weight: 2, fillColor: "#ff0", fillOpacity: 0.7 };
 
-  // Load GeoJSON (same folder). You can also replace with a raw GitHub URL.
+  // Detect if user is on a mobile / touch device
+  const isMobile = L.Browser.mobile || window.matchMedia('(pointer: coarse)').matches;
+
+  // Load GeoJSON
   fetch('irish_counties.geojson')
     .then(resp => resp.json())
     .then(data => {
@@ -106,23 +111,29 @@
           const ga = p.name_ga || meta[0] || '';
           const meaning = p.meaning || meta[1] || '';
 
-          // Tooltip (appears on hover and long-press)
-          lyr.bindTooltip(
-            `<b>English</b> ${en}<br><b>Irish</b> ${ga}<br><b>Meaning</b> ${meaning}`,
-            { sticky: true }
-          );
+          const content = `<b>${en}</b><br><i>${ga}</i><p style="margin:6px 0 0;">${meaning}</p>`;
 
-          // Popup on tap
-          lyr.bindPopup(
-            `<b>${en}</b><br><i>${ga}</i><p style="margin:6px 0 0;">${meaning}</p>`
-          );
+          if (isMobile) {
+            // Only popup on mobile (no tooltip)
+            lyr.bindPopup(content, { maxWidth: 320, autoPan: true });
+          } else {
+            // Tooltip for desktop hover
+            lyr.bindTooltip(
+              `<b>English</b> ${en}<br><b>Irish</b> ${ga}<br><b>Meaning</b> ${meaning}`,
+              { sticky: true, direction: 'auto', opacity: 0.95 }
+            );
+            // Popup also available on click
+            lyr.bindPopup(content, { maxWidth: 320, autoPan: true });
+          }
 
-          // Highlight interactions (mouse + touch)
+          // Highlight + reset
           lyr.on({
             mouseover: () => lyr.setStyle(highlight),
-            mouseout:  () => lyr.setStyle(style),
-            click:     () => lyr.openPopup()
+            mouseout:  () => lyr.setStyle(style)
           });
+
+          // If popup opens, close any tooltip that might linger
+          lyr.on('popupopen', () => lyr.closeTooltip && lyr.closeTooltip());
         }
       }).addTo(map);
 
