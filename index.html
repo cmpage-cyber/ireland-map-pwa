@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Ireland Interactive County Map</title>
+
+  <!-- PWA setup -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#ffffff">
   <link rel="icon" href="icons/icon-192.png">
@@ -27,6 +29,7 @@
     }
   </style>
 </head>
+
 <body>
   <div id="map"></div>
 
@@ -38,14 +41,14 @@
   </script>
 
   <script>
-  // Register service worker for offline/PWA
+  // --- Register service worker for offline/PWA ---
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./service-worker.js');
     });
   }
 
-  // Irish meanings (short versions)
+  // --- Irish meanings (short summaries for tooltip/popup) ---
   const ETYM = {
     "Antrim":["Aontroim","‘Lone ridge’ (aon + droim)"],
     "Armagh":["Ard Mhacha","‘Height of Macha’"],
@@ -81,7 +84,7 @@
     "Sligo":["Sligeach","‘Shelly place’"]
   };
 
-  // Base map (Light default)
+  // --- Base map (Light as default) ---
   const map = L.map('map', { zoomControl: true }).setView([53.4, -7.9], 7);
   const light = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap & CARTO'
@@ -91,17 +94,20 @@
   });
   const baseLayers = { "Light": light, "Dark": dark };
 
-  // Style
+  // --- Style & highlight colors ---
   const style = { color: "#555", weight: 1, fillColor: "#999", fillOpacity: 0.25 };
   const highlight = { color: "#111", weight: 2, fillColor: "#ff0", fillOpacity: 0.7 };
 
-  // Detect if user is on a mobile / touch device
-  const isMobile = L.Browser.mobile || window.matchMedia('(pointer: coarse)').matches;
-
-  // Load GeoJSON
+  // --- Load GeoJSON data ---
   fetch('irish_counties.geojson')
     .then(resp => resp.json())
     .then(data => {
+      const isTouch = (
+        'ontouchstart' in window ||
+        navigator.maxTouchPoints > 0 ||
+        window.matchMedia('(pointer: coarse)').matches
+      );
+
       const layer = L.geoJSON(data, {
         style: () => style,
         onEachFeature: (feature, lyr) => {
@@ -113,30 +119,30 @@
 
           const content = `<b>${en}</b><br><i>${ga}</i><p style="margin:6px 0 0;">${meaning}</p>`;
 
-          if (isMobile) {
-            // Only popup on mobile (no tooltip)
+          if (isTouch) {
+            // --- Mobile: popup only ---
             lyr.bindPopup(content, { maxWidth: 320, autoPan: true });
           } else {
-            // Tooltip for desktop hover
+            // --- Desktop: tooltip on hover, popup on click ---
             lyr.bindTooltip(
               `<b>English</b> ${en}<br><b>Irish</b> ${ga}<br><b>Meaning</b> ${meaning}`,
               { sticky: true, direction: 'auto', opacity: 0.95 }
             );
-            // Popup also available on click
             lyr.bindPopup(content, { maxWidth: 320, autoPan: true });
           }
 
-          // Highlight + reset
+          // --- Highlight interaction ---
           lyr.on({
             mouseover: () => lyr.setStyle(highlight),
             mouseout:  () => lyr.setStyle(style)
           });
 
-          // If popup opens, close any tooltip that might linger
+          // --- Close tooltip if popup opens ---
           lyr.on('popupopen', () => lyr.closeTooltip && lyr.closeTooltip());
         }
       }).addTo(map);
 
+      // --- Fit map bounds & add controls ---
       map.fitBounds(layer.getBounds(), { padding: [10, 10] });
       L.control.layers(baseLayers, { "Counties": layer }, { collapsed: false }).addTo(map);
     })
